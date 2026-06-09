@@ -17,6 +17,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($name === '' || $qty === 0) { throw new RuntimeException('Informe o produto e uma quantidade diferente de zero.'); }
             stock_add_entry($name, trim($_POST['sku'] ?? ''), $qty, 'entrada', $_POST['note'] ?? '', $user['id'] ?? 0);
             $message = 'Entrada registrada com data e hora.';
+        } elseif ($action === 'clear') {
+            if (($_POST['confirm'] ?? '') !== 'ZERAR') { throw new RuntimeException('Para zerar o estoque, digite ZERAR.'); }
+            stock_clear();
+            $message = 'Estoque zerado. Cadastre o estoque inicial novamente.';
         }
     } catch (Throwable $e) { $error = $e->getMessage(); }
 }
@@ -73,5 +77,15 @@ render_header('Entrada de estoque', $user);
             </tbody>
         </table>
     </div>
+</div>
+<div class="panel-card mt-18 danger-zone">
+    <div class="card-head"><div><h2>Zerar estoque</h2><p>Apaga todas as entradas e o saldo volta a zero. Use antes de cadastrar o estoque real.</p></div></div>
+    <form method="post" class="form-stack" onsubmit="return confirm('Zerar TODO o estoque? Não tem volta.');">
+        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="clear">
+        <label>Digite ZERAR para confirmar</label>
+        <input class="input" name="confirm" placeholder="ZERAR" autocomplete="off">
+        <button class="btn btn-danger" type="submit">Zerar estoque</button>
+    </form>
 </div>
 <?php render_footer(); ?>

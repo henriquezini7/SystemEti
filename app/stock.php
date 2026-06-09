@@ -13,6 +13,9 @@ function stock_entries_all() {
 }
 function stock_save_entries($entries) { json_write_file(stock_file(), array_values($entries)); }
 
+// Zera TODO o estoque (apaga as entradas). Saldo volta a zero.
+function stock_clear() { stock_save_entries([]); return true; }
+
 // Registra uma entrada de estoque com dia/data/hora.
 function stock_add_entry($productName, $sku, $qty, $type = 'entrada', $note = '', $userId = 0, $deposit = '') {
     $qty = (int)$qty;
