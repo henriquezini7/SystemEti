@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 set -e
 
-# Railway (e a maioria das PaaS) injeta a porta em $PORT.
+# Railway injeta a porta em $PORT.
 PORT="${PORT:-8080}"
 
-# Faz o Apache escutar na porta certa.
-sed -i "s/^Listen .*/Listen ${PORT}/" /etc/apache2/ports.conf
-sed -i "s/<VirtualHost \*:[0-9]*>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-available/000-default.conf
-
-# Garante que o storage (montado como volume persistente) exista e seja gravável.
+# Garante que o storage (volume persistente) exista e seja gravável.
 mkdir -p \
     /var/www/html/storage/data \
     /var/www/html/storage/uploads \
     /var/www/html/storage/text \
     /var/www/html/storage/exports
-chown -R www-data:www-data /var/www/html/storage
 
-exec apache2-foreground
+# Servidor embutido do PHP servindo a pasta public/.
+# Todas as rotas do painel são arquivos .php reais (login.php, upload.php, ...),
+# então não há necessidade de rewrite de .htaccess. app/ e storage/ ficam fora do DocumentRoot.
+exec php \
+    -d upload_max_filesize=500M \
+    -d post_max_size=540M \
+    -d memory_limit=2048M \
+    -d max_execution_time=1800 \
+    -S 0.0.0.0:"$PORT" \
+    -t /var/www/html/public

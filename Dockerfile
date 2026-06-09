@@ -1,8 +1,10 @@
-# SystemETI — imagem para Railway (PHP + Apache + poppler-utils)
-FROM php:8.2-apache
+# SystemETI — imagem para Railway (PHP + servidor embutido + poppler-utils)
+# Usa o servidor embutido do PHP (php -S), que é o mesmo modo fallback do install.sh.
+# Evita a classe de problemas de MPM da imagem php:apache no Railway.
+FROM php:8.2-cli
 
 # Dependências do sistema:
-# - poppler-utils  -> fornece /usr/bin/pdftotext e /usr/bin/pdfinfo (leitura dos PDFs)
+# - poppler-utils  -> /usr/bin/pdftotext e /usr/bin/pdfinfo (leitura dos PDFs)
 # - libs para extensões PHP usadas pelo painel (mbstring, gd, zip)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         poppler-utils \
@@ -12,11 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && docker-php-ext-install mbstring gd zip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Habilita reescrita de URL e garante MPM único = prefork (exigido pelo mod_php).
-# Sem isso o Apache aborta com "More than one MPM loaded" e o container fica em 502.
-RUN a2dismod mpm_event mpm_worker 2>/dev/null || true \
-    && a2enmod mpm_prefork rewrite
 
 # Limites de upload/execução para PDFs grandes (igual ao install.sh da VPS)
 RUN { \
@@ -28,13 +25,11 @@ RUN { \
 
 # Código da aplicação
 COPY . /var/www/html/
+WORKDIR /var/www/html
 
-# Configuração do Apache (DocumentRoot -> public/) e entrypoint
-COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
+# Entrypoint sobe o php -S na $PORT do Railway, com DocumentRoot em public/
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && chown -R www-data:www-data /var/www/html
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Railway injeta a porta em $PORT; o entrypoint ajusta o Apache em runtime.
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
