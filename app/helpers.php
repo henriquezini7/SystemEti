@@ -66,6 +66,12 @@ function redirect($path) {
     exit;
 }
 
+// Detecta celular pelo User-Agent (separa o APP mobile do SISTEMA desktop).
+function is_mobile() {
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    return (bool)preg_match('/Android|iPhone|iPod|Mobile|Opera Mini|IEMobile|BlackBerry/i', $ua);
+}
+
 function moneyless_number($n) {
     return number_format((float)$n, 0, ',', '.');
 }

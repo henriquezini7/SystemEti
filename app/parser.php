@@ -253,6 +253,21 @@ class PdfLabelParser
 
     private function parseMercadoLivre($text)
     {
+        // Recusa PDFs claramente Shopee para o leitor de ML não gerar lixo a partir da
+        // tabela "IDENTIFICAÇÃO DOS BENS". Só recusa quando NÃO há marcador forte de ML
+        // (assim PDF misto ML+Shopee continua sendo lido pelo ML).
+        $flatGuard = $this->lower($this->removeAccents((string)$text));
+        $shopeeStrong = strpos($flatGuard, 'identificacao dos bens') !== false
+            || strpos($flatGuard, 'spxlm') !== false
+            || strpos($flatGuard, 'agencia shopee') !== false
+            || strpos($flatGuard, 'levar para agencia') !== false
+            || (strpos($flatGuard, 'declaracao de conteudo') !== false && strpos($flatGuard, 'dace resumida') !== false);
+        $mlStrong = strpos($flatGuard, 'despachem as suas vendas') !== false
+            || strpos($flatGuard, 'mercado livre') !== false;
+        if ($shopeeStrong && !$mlStrong) {
+            return ['labels' => [], 'orders' => [], 'warnings' => []];
+        }
+
         $shpLabels = [];
         $trackingLabels = [];
         preg_match_all('/\bSHP:\s*(\d{6,})\b/i', $text, $shpMatches);
@@ -1436,6 +1451,11 @@ class PdfLabelParser
         if (empty($items) && trim((string)$rawPage) !== '') { $items = $this->extractShopeeDaceItemTable($rawPage); }
         if (!empty($items)) { return $items; }
 
+        // Modelo "IDENTIFICAÇÃO DOS BENS" com colunas Nº/SKU/DESCRIÇÃO/VARIAÇÃO/QTD,
+        // onde SKU e descrição quebram em várias linhas. Usa as posições das colunas do cabeçalho.
+        $items = $this->extractShopeeBensColumnar($page);
+        if (!empty($items)) { return $items; }
+
         if (trim((string)$rawPage) !== '') {
             $items = $this->extractShopeeItemsFromRawPage($rawPage);
             if (!empty($items)) {
@@ -1487,6 +1507,82 @@ class PdfLabelParser
                 $items[$currentIndex]['product_name'] = $this->cleanProduct($items[$currentIndex]['product_name'] . ' ' . $line);
             }
         }
+        return $items;
+    }
+
+    private function charPosUtf($hay, $needle)
+    {
+        if (function_exists('mb_strpos')) {
+            $p = mb_strpos($hay, $needle, 0, 'UTF-8');
+        } else {
+            $p = strpos($hay, $needle);
+        }
+        return ($p === false) ? -1 : $p;
+    }
+
+    // Lê a tabela "IDENTIFICAÇÃO DOS BENS" (Nº/SKU/DESCRIÇÃO/VARIAÇÃO/QTD) onde SKU e
+    // descrição quebram em várias linhas. Usa as posições de coluna do cabeçalho (-layout).
+    private function extractShopeeBensColumnar($page)
+    {
+        $lines = preg_split('/\n/', (string)$page);
+        $n = count($lines);
+        $descPos = -1; $cutPos = -1; $skuPos = -1; $qtdPos = -1; $hdr = -1;
+        for ($i = 0; $i < $n; $i++) {
+            $flat = $this->lower($this->removeAccents($lines[$i]));
+            if (strpos($flat, 'descri') !== false && strpos($flat, 'qtd') !== false && strpos($flat, 'sku') !== false) {
+                $descPos = $this->charPosUtf($flat, 'descri');
+                $varia   = $this->charPosUtf($flat, 'varia');
+                $qtdPos  = $this->charPosUtf($flat, 'qtd');
+                $skuPos  = $this->charPosUtf($flat, 'sku');
+                $cutPos  = ($varia > $descPos) ? $varia : ($qtdPos > $descPos ? $qtdPos : $descPos + 40);
+                $hdr = $i; break;
+            }
+        }
+        if ($hdr < 0 || $descPos < 0) { return []; }
+
+        $items = []; $cur = null;
+        $flush = function () use (&$items, &$cur) {
+            if ($cur !== null) {
+                $name = $this->cleanProduct($cur['product_name']);
+                $sku = preg_replace('/[-\s]?20\d{2}$/', '', trim($cur['sku'])); // remove data/ano que vaza pra coluna SKU
+                if ($name !== '' && $this->isValidProductName($name)) {
+                    $items[] = ['sku' => trim($sku), 'product_name' => $name, 'quantity' => max(1, (int)$cur['quantity'])];
+                }
+            }
+            $cur = null;
+        };
+        $noStart = max(0, ($skuPos > 0 ? $skuPos : $descPos) - 8);
+        for ($i = $hdr + 1; $i < $n; $i++) {
+            $raw = rtrim((string)$lines[$i]);
+            if (trim($raw) === '') { continue; }
+            $flat = $this->lower($this->removeAccents($raw));
+            if (preg_match('/\b(declara[cç]|assinatura|peso\s+total|observa[cç])/u', $flat)) { break; }
+
+            $desc    = trim($this->substrUtf($raw, $descPos, max(4, $cutPos - $descPos)));
+            $noCell  = trim($this->substrUtf($raw, $noStart, ($skuPos > $noStart ? $skuPos - $noStart : 6)));
+            $skuCell = ($skuPos >= 0) ? trim($this->substrUtf($raw, $skuPos, max(2, $descPos - $skuPos))) : '';
+            $qtyCell = ($qtdPos >= 0) ? trim($this->substrUtf($raw, $qtdPos, 8)) : '';
+
+            $isTotal = (bool)preg_match('/\btotal\b/i', $flat);
+            $newItem = (bool)preg_match('/^\d{1,3}$/', $noCell);
+
+            if ($newItem) { $flush(); $cur = ['sku' => '', 'product_name' => '', 'quantity' => 1]; }
+            elseif ($cur === null && $desc !== '' && !$isTotal && $this->isValidProductName($this->cleanProduct($desc))) {
+                $cur = ['sku' => '', 'product_name' => '', 'quantity' => 1];
+            }
+
+            if ($cur !== null) {
+                if ($skuCell !== '' && preg_match('/[A-Z0-9]/i', $skuCell) && !preg_match('/^total/i', $skuCell)) {
+                    $cur['sku'] = trim($cur['sku'] . $skuCell);
+                }
+                if ($desc !== '' && !$isTotal && !preg_match('/^[\d.,]+$/', $desc)) {
+                    $cur['product_name'] = trim($cur['product_name'] . ' ' . $desc);
+                }
+                if (preg_match('/^(\d{1,4})$/', $qtyCell, $mq)) { $cur['quantity'] = max(1, (int)$mq[1]); }
+            }
+            if ($isTotal) { $flush(); }
+        }
+        $flush();
         return $items;
     }
 
