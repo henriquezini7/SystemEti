@@ -1,0 +1,5 @@
+# Scripts shell e entrypoints precisam ser LF mesmo no Windows
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+install.sh text eol=lf
+update_v14.sh text eol=lf

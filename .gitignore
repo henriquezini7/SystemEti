@@ -1,0 +1,13 @@
+# Dados locais (não versionar)
+storage/data/*
+storage/uploads/*
+storage/text/*
+storage/exports/*
+!storage/**/.gitkeep
+
+# Config local com segredos
+app/config.local.php
+
+# Diversos
+*.zip
+.DS_Store

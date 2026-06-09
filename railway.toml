@@ -1,0 +1,10 @@
+# Configuração de build/deploy do SystemETI no Railway.
+# O volume persistente (storage) deve ser criado pelo dashboard ou CLI:
+#   railway volume add --mount-path /var/www/html/storage
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

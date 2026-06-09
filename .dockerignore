@@ -1,0 +1,9 @@
+# Não enviar dados locais / lixo para a imagem
+storage/data/*
+storage/uploads/*
+storage/text/*
+storage/exports/*
+!storage/**/.gitkeep
+app/config.local.php
+.git
+*.zip
