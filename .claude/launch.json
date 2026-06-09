@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "systemeti",
+      "runtimeExecutable": "C:\\Users\\henri\\AppData\\Local\\Microsoft\\WinGet\\Packages\\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\\php.exe",
+      "runtimeArgs": ["-d", "upload_max_filesize=500M", "-d", "post_max_size=540M", "-S", "127.0.0.1:8088", "-t", "public"],
+      "port": 8088
+    }
+  ]
+}
