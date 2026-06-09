@@ -42,6 +42,8 @@ function render_header($title, $user = null) {
             <a class="<?= active_class('scan.php') ?>" href="scan.php"><span>📲</span> Bipagem</a>
             <a class="<?= active_class('conferencia.php') ?>" href="conferencia.php"><span>✔️</span> Conferência</a>
             <a class="<?= active_class('labels.php') ?>" href="labels.php"><span>🏷️</span> Etiquetas</a>
+            <a class="<?= active_class('estoque.php') ?>" href="estoque.php"><span>📦</span> Estoque</a>
+            <a class="<?= active_class('estoque_entrada.php') ?>" href="estoque_entrada.php"><span>📥</span> Entrada estoque</a>
             <a class="<?= active_class('settings.php') ?>" href="settings.php"><span>⚙️</span> Configurações</a>
         </nav>
         <div class="sidebar-footer">
