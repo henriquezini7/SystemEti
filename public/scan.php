@@ -62,6 +62,24 @@ render_header('Bipagem de Envio', $user);
             <input class="scan-input" id="scanCode" name="code" placeholder="Bipe aqui e pressione Enter" autofocus required>
             <button class="btn btn-primary btn-full" type="submit"><?= $mode === 'return' ? 'Registrar devolução' : 'Confirmar envio' ?></button>
         </form>
+
+        <div class="cam-wrap">
+            <button type="button" class="btn btn-light btn-full" id="camToggle">📷 Ler pela câmera (código de barras / QR)</button>
+            <div id="camBox" hidden>
+                <div id="reader"></div>
+                <div id="camResult" class="scan-cam-result"></div>
+                <button type="button" class="btn btn-danger btn-full" id="camStop">Parar câmera</button>
+            </div>
+        </div>
+        <style>
+            #reader{width:100%;max-width:440px;margin:12px auto;border-radius:12px;overflow:hidden}
+            .scan-cam-result{margin:10px 0;padding:0;min-height:8px}
+            .scan-cam-result.ok,.scan-cam-result.bad{padding:12px 14px;border-radius:10px;font-size:14px}
+            .scan-cam-result.ok{background:#dcfce7;color:#166534}
+            .scan-cam-result.bad{background:#fee2e2;color:#991b1b}
+            .scan-cam-result small{display:block;opacity:.85;margin-top:4px}
+        </style>
+
         <div class="notice-box">Regra de conferência: se o código não estiver em nenhum PDF enviado, o painel avisa como <b>etiqueta não cadastrada</b>. Isso evita despachar pacote que não entrou no controle.</div>
     </div>
 
@@ -114,6 +132,55 @@ render_header('Bipagem de Envio', $user);
     setTimeout(()=>{ osc.stop(); ctx.close(); }, 130);
   } catch(e) {}
   <?php endif; ?>
+})();
+</script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+(function(){
+  const toggle=document.getElementById('camToggle');
+  const box=document.getElementById('camBox');
+  const stopBtn=document.getElementById('camStop');
+  const resultEl=document.getElementById('camResult');
+  const csrf=<?= json_encode(csrf_token()) ?>;
+  const mode=<?= json_encode($mode) ?>;
+  if(!toggle){ return; }
+  if(!window.Html5Qrcode){ toggle.style.display='none'; return; }
+
+  let scanner=null, lastCode='', lastTime=0, busy=false;
+
+  function beep(ok){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(),g=c.createGain(); o.connect(g);g.connect(c.destination); o.frequency.value=ok?880:220; g.gain.value=.08; o.start(); setTimeout(()=>{o.stop();c.close();},130);}catch(e){} }
+  function show(html,cls){ resultEl.className='scan-cam-result '+cls; resultEl.innerHTML=html; }
+
+  async function onScan(code){
+    const now=Date.now();
+    if(busy) return;
+    if(code===lastCode && (now-lastTime)<2500) return; // ignora o mesmo código em sequência
+    lastCode=code; lastTime=now; busy=true;
+    try{
+      const fd=new FormData(); fd.append('_csrf',csrf); fd.append('mode',mode); fd.append('code',code);
+      const r=await fetch('scan_api.php',{method:'POST',body:fd});
+      const j=await r.json();
+      beep(!!j.ok);
+      const extra=j.tracking?('<small>'+((j.recipient||'')+' · '+j.tracking)+'</small>'):'';
+      show('<strong>'+(j.message||'Lido: '+code)+'</strong>'+extra, j.ok?'ok':'bad');
+    }catch(e){ beep(false); show('<strong>Erro de conexão. Tente de novo.</strong>','bad'); }
+    finally{ setTimeout(()=>{busy=false;},700); }
+  }
+
+  async function start(){
+    box.hidden=false; toggle.hidden=true;
+    const fmts=[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.CODE_93,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.CODABAR];
+    scanner=new Html5Qrcode("reader",{formatsToSupport:fmts,verbose:false});
+    try{
+      await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:170}},onScan,()=>{});
+    }catch(e){ show('<strong>Não consegui abrir a câmera. Permita o acesso (e use HTTPS).</strong>','bad'); }
+  }
+  async function stop(){
+    if(scanner){ try{ await scanner.stop(); await scanner.clear(); }catch(e){} scanner=null; }
+    box.hidden=true; toggle.hidden=false; resultEl.className='scan-cam-result'; resultEl.innerHTML='';
+  }
+  toggle.addEventListener('click',start);
+  stopBtn.addEventListener('click',stop);
 })();
 </script>
 <?php render_footer(); ?>
