@@ -777,78 +777,71 @@ function store_label_status_label($status) {
 
 function store_register_report_labels($reportId, $report, $orders) {
     store_init();
+    $reportId = (int)$reportId;
     $labels = store_scan_labels_all();
     $byKey = [];
     foreach ($labels as $i => $label) {
         $key = (string)($label['key'] ?? '');
         if ($key !== '') { $byKey[$key] = $i; }
     }
-
     $now = date('c');
+    $metaFields = ['tracking_code','shipment_id','sale_id','pack_id','recipient','recipient_address','recipient_city','recipient_cep','sender_name','sender_city','nf','service','weight','dace_number'];
+
+    // 1) Agrupa por etiqueta SÓ os pedidos DESTE relatório (acumula uma vez). Idempotente:
+    //    re-sincronizar o mesmo relatório produz exatamente o mesmo resultado (não soma de novo).
+    $fresh = [];
     $row = 0;
     foreach (($orders ?: []) as $o) {
         $row++;
         $key = scan_label_key_from_order($o, $reportId . '-' . $row);
         if ($key === '') { continue; }
-        $aliases = scan_aliases_from_order($o);
-        $product = [
-            'product_name' => store_product_display_name($o['product_name'] ?? 'Produto não identificado'),
-            'sku' => trim((string)($o['sku'] ?? '')),
-            'quantity' => max(1, (int)($o['quantity'] ?? 1)),
-            'item_value' => trim((string)($o['item_value'] ?? '')),
-        ];
+        if (!isset($fresh[$key])) { $fresh[$key] = ['aliases' => [$key], 'products' => [], 'order' => $o]; }
+        foreach (scan_aliases_from_order($o) as $a) { $fresh[$key]['aliases'][] = $a; }
+        foreach ($metaFields as $f) {
+            if (empty($fresh[$key]['order'][$f]) && !empty($o[$f])) { $fresh[$key]['order'][$f] = $o[$f]; }
+        }
+        $name = store_product_display_name($o['product_name'] ?? 'Produto não identificado');
+        $sku = trim((string)($o['sku'] ?? ''));
+        $pk = store_product_key($name, $sku);
+        if (!isset($fresh[$key]['products'][$pk])) {
+            $fresh[$key]['products'][$pk] = ['product_name' => $name, 'sku' => $sku, 'quantity' => 0, 'item_value' => trim((string)($o['item_value'] ?? ''))];
+        }
+        $fresh[$key]['products'][$pk]['quantity'] += max(1, (int)($o['quantity'] ?? 1));
+    }
+
+    // 2) Aplica de forma idempotente: SET (não soma) os produtos/unidades; preserva status/bipagem.
+    foreach ($fresh as $key => $f) {
+        $o = $f['order'];
+        $products = array_values($f['products']);
+        $units = 0;
+        foreach ($products as $p) { $units += max(1, (int)$p['quantity']); }
+        $aliases = array_values(array_unique(array_merge([$key], $f['aliases'])));
 
         if (!isset($byKey[$key])) {
-            $labels[] = [
-                'key' => $key,
-                'aliases' => array_values(array_unique(array_merge([$key], $aliases))),
-                'status' => 'pending',
-                'report_id' => (int)$reportId,
-                'report_file' => $report['original_filename'] ?? '',
-                'platform' => $report['platform'] ?? '',
-                'registered_at' => $now,
-                'tracking_code' => trim((string)($o['tracking_code'] ?? '')),
-                'shipment_id' => trim((string)($o['shipment_id'] ?? '')),
-                'sale_id' => trim((string)($o['sale_id'] ?? '')),
-                'pack_id' => trim((string)($o['pack_id'] ?? '')),
-                'recipient' => trim((string)($o['recipient'] ?? '')),
-                'recipient_address' => trim((string)($o['recipient_address'] ?? '')),
-                'recipient_city' => trim((string)($o['recipient_city'] ?? '')),
-                'recipient_cep' => trim((string)($o['recipient_cep'] ?? '')),
-                'sender_name' => trim((string)($o['sender_name'] ?? '')),
-                'sender_city' => trim((string)($o['sender_city'] ?? '')),
-                'nf' => trim((string)($o['nf'] ?? '')),
-                'service' => trim((string)($o['service'] ?? '')),
-                'weight' => trim((string)($o['weight'] ?? '')),
-                'dace_number' => trim((string)($o['dace_number'] ?? '')),
-                'products' => [$product],
-                'units_total' => $product['quantity'],
-                'scan_count' => 0,
-                'sent_at' => '',
-                'returned_at' => '',
-                'last_scan_at' => '',
-                'history' => [],
+            $label = [
+                'key' => $key, 'aliases' => $aliases, 'status' => 'pending',
+                'report_id' => $reportId, 'report_file' => $report['original_filename'] ?? '',
+                'platform' => $report['platform'] ?? '', 'registered_at' => $now,
+                'products' => $products, 'units_total' => $units,
+                'scan_count' => 0, 'sent_at' => '', 'returned_at' => '', 'last_scan_at' => '', 'history' => [],
             ];
+            foreach ($metaFields as $fld) { $label[$fld] = trim((string)($o[$fld] ?? '')); }
+            $labels[] = $label;
             $byKey[$key] = count($labels) - 1;
         } else {
             $idx = $byKey[$key];
-            $existing = $labels[$idx];
-            $labels[$idx]['aliases'] = array_values(array_unique(array_merge($existing['aliases'] ?? [], [$key], $aliases)));
-            foreach (['tracking_code','shipment_id','sale_id','pack_id','recipient','recipient_address','recipient_city','recipient_cep','sender_name','sender_city','nf','service','weight','dace_number'] as $f) {
-                if (empty($labels[$idx][$f]) && !empty($o[$f])) { $labels[$idx][$f] = trim((string)$o[$f]); }
+            $owner = (int)($labels[$idx]['report_id'] ?? 0);
+            $labels[$idx]['aliases'] = array_values(array_unique(array_merge($labels[$idx]['aliases'] ?? [], $aliases)));
+            foreach ($metaFields as $fld) {
+                if (empty($labels[$idx][$fld]) && !empty($o[$fld])) { $labels[$idx][$fld] = trim((string)$o[$fld]); }
             }
-            $productKey = store_product_key($product['product_name'], $product['sku']);
-            $foundProd = false;
-            foreach (($labels[$idx]['products'] ?? []) as $pi => $p) {
-                if (store_product_key($p['product_name'] ?? '', $p['sku'] ?? '') === $productKey) {
-                    $labels[$idx]['products'][$pi]['quantity'] = (int)($labels[$idx]['products'][$pi]['quantity'] ?? 0) + $product['quantity'];
-                    $foundProd = true;
-                    break;
-                }
+            // Produtos/unidades: substitui (não acumula), só quando a etiqueta é deste relatório ou sem dono.
+            if ($owner === 0 || $owner === $reportId) {
+                $labels[$idx]['products'] = $products;
+                $labels[$idx]['units_total'] = $units;
+                if ($owner === 0) { $labels[$idx]['report_id'] = $reportId; }
             }
-            if (!$foundProd) { $labels[$idx]['products'][] = $product; }
-            $labels[$idx]['units_total'] = 0;
-            foreach (($labels[$idx]['products'] ?? []) as $p) { $labels[$idx]['units_total'] += max(1, (int)($p['quantity'] ?? 1)); }
+            // status, sent_at, returned_at, scan_count, history: preservados (não tocados).
         }
     }
     store_save_scan_labels($labels);
