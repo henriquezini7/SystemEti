@@ -513,6 +513,60 @@ function store_daily_index($limit = 30) {
     return array_slice(array_values($days), 0, (int)$limit);
 }
 
+/* v16 - Relatórios por período: dia / semana / mês */
+function period_bucket_key($iso, $granularity) {
+    try {
+        $dt = new DateTime((string)$iso);
+        $dt->setTimezone(new DateTimeZone(app_timezone()));
+    } catch (Throwable $e) {
+        $dt = new DateTime('now', new DateTimeZone(app_timezone()));
+    }
+    if ($granularity === 'month') { return $dt->format('Y-m'); }
+    if ($granularity === 'week')  { return $dt->format('o-\WW'); } // ano ISO + semana
+    return $dt->format('Y-m-d');
+}
+
+function period_bucket_label($key, $granularity) {
+    if ($granularity === 'month') {
+        $meses = ['01'=>'Janeiro','02'=>'Fevereiro','03'=>'Março','04'=>'Abril','05'=>'Maio','06'=>'Junho','07'=>'Julho','08'=>'Agosto','09'=>'Setembro','10'=>'Outubro','11'=>'Novembro','12'=>'Dezembro'];
+        $p = explode('-', (string)$key);
+        return ($meses[$p[1] ?? ''] ?? ($p[1] ?? '')) . '/' . ($p[0] ?? '');
+    }
+    if ($granularity === 'week') {
+        $p = explode('-W', (string)$key);
+        return 'Semana ' . ($p[1] ?? '') . ' · ' . ($p[0] ?? '');
+    }
+    return br_date_from_key($key);
+}
+
+// Agrega entrada (por data do PDF) e saída (por data da bipagem) em buckets de dia/semana/mês.
+function store_period_report($granularity = 'day', $limit = 90) {
+    $g = in_array($granularity, ['day', 'week', 'month'], true) ? $granularity : 'day';
+    $rows = [];
+    $blank = function ($k) { return ['key' => $k, 'reports' => 0, 'labels' => 0, 'orders' => 0, 'units' => 0, 'sent' => 0, 'units_sent' => 0]; };
+
+    foreach (store_reports() as $r) {
+        $k = period_bucket_key($r['created_at'] ?? date('c'), $g);
+        if (!isset($rows[$k])) { $rows[$k] = $blank($k); }
+        $rows[$k]['reports']++;
+        $rows[$k]['labels'] += (int)($r['total_labels'] ?? 0);
+        $rows[$k]['orders'] += (int)($r['total_orders'] ?? 0);
+        $rows[$k]['units']  += (int)($r['total_units'] ?? 0);
+    }
+    foreach (store_scan_labels_all() as $l) {
+        if (($l['status'] ?? '') === 'sent' && !empty($l['sent_at'])) {
+            $k = period_bucket_key($l['sent_at'], $g);
+            if (!isset($rows[$k])) { $rows[$k] = $blank($k); }
+            $rows[$k]['sent']++;
+            $rows[$k]['units_sent'] += max(1, (int)($l['units_total'] ?? 1));
+        }
+    }
+    krsort($rows);
+    foreach ($rows as &$row) { $row['label'] = period_bucket_label($row['key'], $g); }
+    unset($row);
+    return array_slice(array_values($rows), 0, (int)$limit);
+}
+
 function store_safe_unlink($path) {
     $path = (string)$path;
     if ($path !== '' && file_exists($path) && is_file($path)) {
