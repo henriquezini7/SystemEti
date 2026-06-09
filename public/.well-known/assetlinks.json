@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.allavadrop.systemeti",
+      "sha256_cert_fingerprints": [
+        "E3:2B:4E:05:15:B6:10:83:A8:F9:49:C1:CC:B6:70:E0:1D:D2:14:2C:39:EA:EC:41:2C:17:95:5D:DA:A3:58:56"
+      ]
+    }
+  }
+]
