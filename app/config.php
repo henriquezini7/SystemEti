@@ -13,6 +13,7 @@ $config = [
     'ocr_dpi' => 220,
     'ocr_max_pages' => 250,
     'ocr_lang' => 'por+eng',
+    'ocr_psm' => 6,
     'storage_driver' => 'json',
     'timezone' => 'America/Sao_Paulo',
 ];

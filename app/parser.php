@@ -338,8 +338,9 @@ class PdfLabelParser
             $png = $base . '.png';
             if (!is_file($png)) { continue; }
             $outBase = $base . '_ocr';
+            $psm = (int)($this->config['ocr_psm'] ?? 6);
             $cmd2 = escapeshellcmd($tess) . ' ' . escapeshellarg($png) . ' ' . escapeshellarg($outBase)
-                . ' -l ' . escapeshellarg($lang) . ' 2>/dev/null';
+                . ' -l ' . escapeshellarg($lang) . ' --psm ' . $psm . ' 2>/dev/null';
             @exec($cmd2);
             $txtFile = $outBase . '.txt';
             if (is_file($txtFile)) {
@@ -391,8 +392,10 @@ class PdfLabelParser
             if (preg_match('/\b([A-Z]{2}\d{9}BR)\b\s*(.*)$/u', $line, $m)) {
                 $flush();
                 $rest = $m[2];
-                // Remove o ruído do checkbox que o OCR coloca entre o código e o produto (ex.: "Oo", "(7", "O").
-                $rest = preg_replace('/^[O0oQ\(\)\[\]\|\dCc\.\-_~»«]{1,3}\s+/u', '', $rest);
+                // Remove o ruído do checkbox que o OCR coloca entre o código e o produto
+                // (ex.: "oO", "[[]", "[J", "O", "(7"). Duas passadas: token curto + espaço, depois não-letras.
+                $rest = preg_replace('/^[O0oQJILTUilt\(\)\[\]\{\}\|\dCc\.\-_~»«•·]{1,4}\s+/u', '', $rest);
+                $rest = preg_replace('/^[^\p{L}]+/u', '', $rest);
                 $current = [
                     'tracking_code' => $m[1],
                     'shipment_id' => '',
