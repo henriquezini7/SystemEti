@@ -34,6 +34,7 @@ render_header('Conferência', $user);
     <div class="hero-actions">
         <a class="btn btn-primary" href="scan.php">Bipar envio</a>
         <a class="btn btn-light" href="labels.php?status=pending">Ver pendentes</a>
+        <a class="btn btn-light" href="conferencia_export.php">Exportar Excel</a>
         <a class="btn btn-light" href="javascript:window.print()">Imprimir</a>
     </div>
 </div>

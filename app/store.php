@@ -582,6 +582,16 @@ function store_delete_all_reports() {
     return $count;
 }
 
+// Zera tudo para começar produção limpa: relatórios, etiquetas registradas e auditoria de bipagem.
+// Mantém o usuário/senha. Útil depois dos testes.
+function store_reset_all() {
+    store_init();
+    store_delete_all_reports();
+    store_save_scan_labels([]);
+    store_save_scan_events([]);
+    return true;
+}
+
 /* v12 - Registro e bipagem de etiquetas */
 function store_labels_file() { return data_file('labels_registry.json'); }
 function store_events_file() { return data_file('scan_events.json'); }

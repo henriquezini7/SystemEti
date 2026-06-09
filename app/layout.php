@@ -14,6 +14,13 @@ function render_header($title, $user = null) {
     <link rel="preconnect" href="https://fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=12.0.0">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="SystemETI">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="assets/img/icon-192.png">
 </head>
 <body>
 <div class="app-shell">
@@ -71,6 +78,7 @@ function render_footer() {
 </div>
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 <script src="assets/js/app.js?v=12.0.0"></script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
 </body>
 </html>
     <?php
