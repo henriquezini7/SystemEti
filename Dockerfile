@@ -8,6 +8,8 @@ FROM php:8.2-cli
 # - libs para extensões PHP usadas pelo painel (mbstring, gd, zip)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-por \
         libzip-dev \
         libpng-dev \
         libonig-dev \

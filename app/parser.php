@@ -15,6 +15,23 @@ class PdfLabelParser
         $text = $this->extractText($pdfPath, $textOutputPath);
         $rawText = $this->extractRawText($pdfPath);
         $pages = $this->countPages($pdfPath, $text);
+
+        // v15: OCR automático. Se o PDF não tem texto selecionável (etiqueta em imagem),
+        // renderiza as páginas e passa OCR (Tesseract) para conseguir ler pedidos/produtos.
+        $usedOcr = false;
+        if (!empty($this->config['ocr_enabled']) && $this->textIsSparse($text, $pages)) {
+            $ocrText = $this->ocrPdf($pdfPath, $pages);
+            if (trim($ocrText) !== '') {
+                $text = $ocrText;
+                $rawText = $ocrText;
+                $usedOcr = true;
+                @file_put_contents($textOutputPath, $ocrText);
+            }
+        }
+        if (trim($text) === '') {
+            throw new RuntimeException('O PDF não tem texto e o OCR não conseguiu ler. Confira se é um PDF válido.');
+        }
+
         // v11: modo inteligente. Em vez de depender de uma única detecção inicial,
         // o painel roda os parsers conhecidos, pontua o resultado e fica com o mais completo.
         // Isso resolve PDFs mistos: Shopee com DACE, Mercado Livre com DANFE no final,
@@ -27,6 +44,10 @@ class PdfLabelParser
         $result['pages'] = $pages;
         $result['raw_text'] = $text;
         $result['warnings'] = $result['warnings'] ?? [];
+        if ($usedOcr) {
+            $result['ocr'] = true;
+            $result['warnings'][] = 'PDF de imagem: leitura feita por OCR. Confira os totais e os produtos.';
+        }
 
         if (empty($result['labels']) && !empty($result['orders'])) {
             $codes = [];
@@ -72,10 +93,8 @@ class PdfLabelParser
         $text = file_get_contents($textOutputPath);
         $text = str_replace("\r\n", "\n", $text);
         $text = str_replace("\r", "\n", $text);
-        if (trim($text) === '') {
-            throw new RuntimeException('O PDF não possui texto selecionável. Será necessário OCR ou exportação de pedidos.');
-        }
-        return $text;
+        // Não lança erro quando vem vazio: pode ser PDF de imagem, e o process() aciona o OCR.
+        return (string)$text;
     }
 
     private function extractRawText($pdfPath)
@@ -264,6 +283,9 @@ class PdfLabelParser
             $orders = $this->parseMercadoLivreSingleProductSection($text);
         }
         if (empty($orders)) {
+            $orders = $this->parseMercadoLivreOcrList($text);
+        }
+        if (empty($orders)) {
             $orders = $this->parseMercadoLivreReportFallbackSection($text);
         }
         if (empty($orders)) {
@@ -277,6 +299,131 @@ class PdfLabelParser
             'orders' => $orders,
             'warnings' => empty($orders) ? ['PDF lido, mas não encontrei seção de produtos. O relatório terá somente etiquetas/rastreios.'] : [],
         ];
+    }
+
+    /* v15 - OCR -------------------------------------------------------------- */
+
+    // Detecta PDF de imagem: pouquíssimo texto real por página.
+    private function textIsSparse($text, $pages)
+    {
+        $stripped = preg_replace('/\s+/u', '', (string)$text);
+        $len = function_exists('mb_strlen') ? mb_strlen($stripped, 'UTF-8') : strlen($stripped);
+        $pages = max(1, (int)$pages);
+        return ($len / $pages) < 15;
+    }
+
+    // Renderiza cada página (pdftoppm) e passa OCR (tesseract). Retorna o texto reconhecido.
+    private function ocrPdf($pdfPath, $pages = 0)
+    {
+        $ppm = $this->config['pdftoppm_bin'] ?? '/usr/bin/pdftoppm';
+        $tess = $this->config['tesseract_bin'] ?? '/usr/bin/tesseract';
+        if ((strpos($ppm, '/') !== false && !is_executable($ppm)) || (strpos($tess, '/') !== false && !is_executable($tess))) {
+            return '';
+        }
+        $dpi = (int)($this->config['ocr_dpi'] ?? 220);
+        $lang = (string)($this->config['ocr_lang'] ?? 'por+eng');
+        $maxPages = (int)($this->config['ocr_max_pages'] ?? 250);
+        $pages = ((int)$pages > 0) ? (int)$pages : $this->countPages($pdfPath, '');
+        $pages = max(1, min($pages, $maxPages));
+
+        $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'ocr_' . bin2hex(random_bytes(5));
+        @mkdir($tmp, 0775, true);
+        $all = [];
+        for ($p = 1; $p <= $pages; $p++) {
+            $base = $tmp . DIRECTORY_SEPARATOR . 'p' . $p;
+            $cmd = escapeshellcmd($ppm) . ' -png -singlefile -r ' . $dpi
+                . ' -f ' . $p . ' -l ' . $p . ' '
+                . escapeshellarg($pdfPath) . ' ' . escapeshellarg($base) . ' 2>/dev/null';
+            @exec($cmd);
+            $png = $base . '.png';
+            if (!is_file($png)) { continue; }
+            $outBase = $base . '_ocr';
+            $cmd2 = escapeshellcmd($tess) . ' ' . escapeshellarg($png) . ' ' . escapeshellarg($outBase)
+                . ' -l ' . escapeshellarg($lang) . ' 2>/dev/null';
+            @exec($cmd2);
+            $txtFile = $outBase . '.txt';
+            if (is_file($txtFile)) {
+                $all[] = (string)file_get_contents($txtFile);
+                @unlink($txtFile);
+            }
+            @unlink($png);
+        }
+        foreach (glob($tmp . DIRECTORY_SEPARATOR . '*') ?: [] as $f) { @unlink($f); }
+        @rmdir($tmp);
+
+        $text = implode("\f\n", $all);
+        $text = str_replace("\r\n", "\n", $text);
+        return str_replace("\r", "\n", $text);
+    }
+
+    // Leitor da lista "Identificação / Produtos" do Mercado Livre a partir de texto OCR.
+    // No OCR, rastreio e produto ficam na MESMA linha; Venda/Quantidade/destinatário nas seguintes.
+    private function parseMercadoLivreOcrList($text)
+    {
+        $flat = $this->lower($this->removeAccents((string)$text));
+        $anchor = strpos($flat, 'despachem as suas vendas');
+        if ($anchor === false) { $anchor = strpos($flat, 'identifica'); }
+        if ($anchor === false) { $anchor = strpos($flat, 'produtos'); }
+        if ($anchor === false) { return []; }
+
+        $section = $this->substrUtf((string)$text, $anchor);
+        $lines = preg_split('/\n/', $section);
+        $orders = [];
+        $current = null;
+
+        $flush = function () use (&$orders, &$current) {
+            if ($current) {
+                $name = $this->cleanProduct($current['product_name'] ?? '');
+                if ($name !== '' && $this->isValidProductName($name)) {
+                    $current['product_name'] = $name;
+                    $current['quantity'] = max(1, (int)($current['quantity'] ?? 1));
+                    $orders[] = $current;
+                }
+            }
+            $current = null;
+        };
+
+        foreach ($lines as $raw) {
+            $line = trim(preg_replace('/\s+/u', ' ', (string)$raw));
+            if ($line === '') { continue; }
+
+            // Linha de pedido: rastreio Correios (AD/AP...BR) seguido do nome do produto.
+            if (preg_match('/\b([A-Z]{2}\d{9}BR)\b\s*(.*)$/u', $line, $m)) {
+                $flush();
+                $rest = $m[2];
+                // Remove o ruído do checkbox que o OCR coloca entre o código e o produto (ex.: "Oo", "(7", "O").
+                $rest = preg_replace('/^[O0oQ\(\)\[\]\|\dCc\.\-_~»«]{1,3}\s+/u', '', $rest);
+                $current = [
+                    'tracking_code' => $m[1],
+                    'shipment_id' => '',
+                    'sale_id' => '',
+                    'pack_id' => '',
+                    'recipient' => '',
+                    'product_name' => trim($rest),
+                    'sku' => '',
+                    'quantity' => 1,
+                ];
+                continue;
+            }
+
+            if (!$current) { continue; }
+
+            if (preg_match('/Venda:\s*([0-9]{6,})/iu', $line, $m)) { $current['sale_id'] = $m[1]; }
+            if (preg_match('/Pack\s*ID:\s*([0-9]{6,})/iu', $line, $m)) { $current['pack_id'] = $m[1]; }
+            if (preg_match('/Quantidade:\s*(\d+)/iu', $line, $m)) { $current['quantity'] = max(1, (int)$m[1]); }
+
+            if (!preg_match('/Venda:|Pack\s*ID:|Quantidade:/iu', $line)) {
+                if ($this->looksLikeProduct($line) && mb_strlen($line, 'UTF-8') > 6) {
+                    // Continuação do nome do produto (quebrou em 2 linhas).
+                    $current['product_name'] = trim(($current['product_name'] ?? '') . ' ' . $line);
+                } elseif (empty($current['recipient'])) {
+                    $name = $this->cleanPersonName($line);
+                    if ($name !== '') { $current['recipient'] = $name; }
+                }
+            }
+        }
+        $flush();
+        return $orders;
     }
 
     private function parseMercadoLivreModernProductSection($text)
