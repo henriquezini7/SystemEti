@@ -13,8 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Habilita reescrita de URL (o painel usa public/.htaccess)
-RUN a2enmod rewrite
+# Habilita reescrita de URL e garante MPM único = prefork (exigido pelo mod_php).
+# Sem isso o Apache aborta com "More than one MPM loaded" e o container fica em 502.
+RUN a2dismod mpm_event mpm_worker 2>/dev/null || true \
+    && a2enmod mpm_prefork rewrite
 
 # Limites de upload/execução para PDFs grandes (igual ao install.sh da VPS)
 RUN { \
