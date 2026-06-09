@@ -43,8 +43,16 @@ m_head('Dashboard', ['right' => $right]);
 <div class="section-title">Atalhos rápidos</div>
 <div class="m-shortcuts">
   <a class="m-shortcut" href="bipar.php"><span class="ic">&#128229;</span>Nova Saída</a>
+  <a class="m-shortcut" href="produtos.php"><span class="ic">&#128230;</span>Produtos</a>
   <a class="m-shortcut" href="etiquetas.php"><span class="ic">&#127991;&#65039;</span>Etiquetas</a>
   <a class="m-shortcut" href="relatorios_app.php"><span class="ic">&#128202;</span>Relatórios</a>
-  <a class="m-shortcut" href="conferencia.php"><span class="ic">&#9989;</span>Conferência</a>
+</div>
+
+<div class="section-title">Top produtos (mais movimentados)</div>
+<div class="m-card" style="padding:6px 16px">
+  <?php $top = store_products_control(5); foreach ($top as $i => $p): ?>
+    <div class="kv"><span class="k"><?= ($i+1) ?>. <?= e(strlen($p['product_name'])>30?substr($p['product_name'],0,30).'…':$p['product_name']) ?></span><span class="v"><?= (int)$p['total'] ?> itens</span></div>
+  <?php endforeach; ?>
+  <?php if (!$top): ?><div class="empty-m" style="padding:12px">Sem produtos ainda.</div><?php endif; ?>
 </div>
 <?php m_foot('home'); ?>

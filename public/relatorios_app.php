@@ -38,5 +38,15 @@ m_head('Relatórios', ['right' => $right]);
   </div>
 <?php endforeach; ?>
 <?php if (!$rows): ?><div class="empty-m">Sem dados ainda. Suba um PDF e bipe etiquetas.</div><?php endif; ?>
+
+<div class="section-title">Top Itens</div>
+<div class="m-card" style="padding:6px 16px">
+  <?php $top = store_products_control(10); foreach ($top as $p): ?>
+    <div class="kv"><span class="k"><?= e(strlen($p['product_name'])>34?substr($p['product_name'],0,34).'…':$p['product_name']) ?></span><span class="v"><?= (int)$p['total'] ?></span></div>
+  <?php endforeach; ?>
+  <?php if (!$top): ?><div class="empty-m" style="padding:12px">Sem itens ainda.</div><?php endif; ?>
+</div>
+
 <a class="m-btn light" href="conferencia_export.php" style="margin-top:6px">&#11015; Exportar relatório (Excel)</a>
+<a class="m-btn ghost" href="produtos.php" style="margin-top:10px">Ver controle de produtos</a>
 <?php m_foot('relatorios'); ?>

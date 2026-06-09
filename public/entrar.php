@@ -38,10 +38,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <form method="post">
     <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
     <div class="m-field"><label>Usuário (e-mail)</label><input class="m-input" type="email" name="email" placeholder="admin@local" required></div>
-    <div class="m-field"><label>Senha</label><input class="m-input" type="password" name="password" placeholder="Digite sua senha" required></div>
+    <div class="m-field"><label>Senha</label>
+      <div style="position:relative">
+        <input class="m-input" type="password" name="password" id="pw" placeholder="Digite sua senha" required style="padding-right:46px">
+        <span id="eye" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;color:var(--muted)">&#128065;</span>
+      </div>
+    </div>
     <button class="m-btn primary" type="submit">ENTRAR</button>
   </form>
   <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:24px">Versão 1.0.0</p>
+  <script>
+    var eye=document.getElementById('eye'),pw=document.getElementById('pw');
+    eye.addEventListener('click',function(){ pw.type = pw.type==='password'?'text':'password'; eye.style.color = pw.type==='text'?'#1d4ed8':''; });
+  </script>
 </div>
 </div>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}</script>

@@ -417,6 +417,45 @@ function store_top_products($limit = 8) {
     return array_slice($summary['items'] ?? [], 0, (int)$limit);
 }
 
+/* v17 - Controle de produtos: por produto, quanto entrou x saiu (bipado) x falta */
+function store_products_control($limit = 1000) {
+    store_init();
+    $map = [];
+    foreach (store_scan_labels_all() as $l) {
+        $status = $l['status'] ?? 'pending';
+        foreach (($l['products'] ?? []) as $p) {
+            $name = store_product_display_name($p['product_name'] ?? 'Produto não identificado');
+            $sku = trim((string)($p['sku'] ?? ''));
+            $key = store_product_key($name, $sku);
+            if (!isset($map[$key])) {
+                $map[$key] = ['product_name' => $name, 'sku' => $sku, 'total' => 0, 'sent' => 0, 'pending' => 0, 'returned' => 0, 'labels' => 0];
+            }
+            $q = max(1, (int)($p['quantity'] ?? 1));
+            $map[$key]['total'] += $q;
+            $map[$key]['labels'] += 1;
+            if ($status === 'sent') { $map[$key]['sent'] += $q; }
+            elseif ($status === 'returned') { $map[$key]['returned'] += $q; }
+            else { $map[$key]['pending'] += $q; }
+        }
+    }
+    usort($map, function ($a, $b) {
+        if ($a['total'] === $b['total']) { return strcasecmp($a['product_name'], $b['product_name']); }
+        return $b['total'] <=> $a['total'];
+    });
+    return array_slice(array_values($map), 0, (int)$limit);
+}
+
+function store_products_totals() {
+    $t = ['produtos' => 0, 'total' => 0, 'sent' => 0, 'pending' => 0];
+    foreach (store_products_control() as $p) {
+        $t['produtos']++;
+        $t['total'] += (int)$p['total'];
+        $t['sent'] += (int)$p['sent'];
+        $t['pending'] += (int)$p['pending'];
+    }
+    return $t;
+}
+
 function store_report_day($report) {
     return report_day_key($report['created_at'] ?? date('c'));
 }
