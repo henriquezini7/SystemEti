@@ -57,7 +57,9 @@ Os PDFs de vocês são **imagem** (`/Font=0`). O `pdftotext` lê 0. Mas o **Tess
 - Revogar/rotacionar tokens expostos (Supabase service_role, Railway, Vercel).
 - Limpar dados de teste do ambiente.
 
-### Fase 1 — OCR na entrada (o coração) ⭐
+### Fase 1 — OCR na entrada (o coração) ⭐ ✅ CONCLUÍDA
+Validado no ar: PDF de imagem ML (08-06) → **17 pedidos/produtos/destinatários lidos** + bipagem do código lido por OCR funcionando. Tesseract `--psm 6` mantém colunas na mesma linha; leitor `parseMercadoLivreOcrList`.
+
 - Docker: adicionar `tesseract-ocr` + `tesseract-ocr-por` (poppler/pdftoppm já existe).
 - Parser: se `pdftotext` vier vazio/esparso → renderizar páginas (pdftoppm ~250 dpi) → OCR → texto.
 - Otimização: para ML, OCR só a(s) página(s) "Identificação/Produtos" (lista compacta) → rápido.
@@ -65,11 +67,16 @@ Os PDFs de vocês são **imagem** (`/Font=0`). O `pdftotext` lê 0. Mas o **Tess
 - **Não afeta** PDFs de texto (OCR só dispara quando não há texto).
 - Testar com 02-06, 03-06, 08-06.
 
-### Fase 2 — Painel de Controle / Conferência 100%
-- Tela "Conferência do dia": **Esperados | Bipados | Faltantes | %**.
-- Lista de faltantes em destaque (o que ainda não saiu).
-- Alertas de furo: código bipado fora da entrada, duplicados.
-- Exportar o controle (Excel/TXT) no formato da planilha atual de vocês.
+### Fase 2 — Painel de Controle / Conferência 100% 🔧 EM ANDAMENTO
+- ✅ Tela **Conferência** (`conferencia.php`): **Esperadas | Enviadas | Faltam | %** + barra de progresso.
+- ✅ Lista "Faltam sair" (pendentes) em destaque.
+- ✅ Alerta de furo: códigos bipados que não estavam cadastrados.
+- ⬜ Exportar o controle (Excel/TXT) no formato da planilha atual de vocês.
+
+### Fase APP — Bipagem por câmera (código de barras + QR Code) 📱
+- O app/bipagem vai ler **código de barras e QR Code pela câmera** (não só leitor USB/digitação).
+- Web: dá pra usar a câmera do celular no navegador (biblioteca JS de leitura de barcode/QR) — já adianta o "app" sem instalar nada.
+- Nativo (futuro): app dedicado lendo câmera + modo offline.
 
 ### Fase 3 — Robustez de produção
 - Resolver o servidor single-thread (`php -S`): migrar para **nginx + php-fpm** (multiusuário) ou processar OCR em **segundo plano** com status — pra OCR pesado não travar o painel.

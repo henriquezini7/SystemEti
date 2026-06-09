@@ -32,6 +32,7 @@ function render_header($title, $user = null) {
             <a class="<?= active_class('daily_report.php') ?>" href="daily_report.php"><span>📅</span> Relatório do dia</a>
             <a class="<?= active_class('separation.php') ?>" href="separation.php"><span>🧴</span> Separação</a>
             <a class="<?= active_class('scan.php') ?>" href="scan.php"><span>📲</span> Bipagem</a>
+            <a class="<?= active_class('conferencia.php') ?>" href="conferencia.php"><span>✔️</span> Conferência</a>
             <a class="<?= active_class('labels.php') ?>" href="labels.php"><span>🏷️</span> Etiquetas</a>
             <a class="<?= active_class('settings.php') ?>" href="settings.php"><span>⚙️</span> Configurações</a>
         </nav>
