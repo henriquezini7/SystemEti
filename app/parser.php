@@ -346,7 +346,7 @@ class PdfLabelParser
         $all = [];
         for ($p = 1; $p <= $pages; $p++) {
             $base = $tmp . DIRECTORY_SEPARATOR . 'p' . $p;
-            $cmd = escapeshellcmd($ppm) . ' -png -singlefile -r ' . $dpi
+            $cmd = escapeshellarg($ppm) . ' -png -singlefile -r ' . $dpi
                 . ' -f ' . $p . ' -l ' . $p . ' '
                 . escapeshellarg($pdfPath) . ' ' . escapeshellarg($base) . ' 2>/dev/null';
             @exec($cmd);
@@ -354,7 +354,7 @@ class PdfLabelParser
             if (!is_file($png)) { continue; }
             $outBase = $base . '_ocr';
             $psm = (int)($this->config['ocr_psm'] ?? 6);
-            $cmd2 = escapeshellcmd($tess) . ' ' . escapeshellarg($png) . ' ' . escapeshellarg($outBase)
+            $cmd2 = escapeshellarg($tess) . ' ' . escapeshellarg($png) . ' ' . escapeshellarg($outBase)
                 . ' -l ' . escapeshellarg($lang) . ' --psm ' . $psm . ' 2>/dev/null';
             @exec($cmd2);
             $txtFile = $outBase . '.txt';
@@ -1274,6 +1274,9 @@ class PdfLabelParser
         if ($tracking !== '') { $meta['tracking_code'] = $tracking; }
 
         if (preg_match('/\b(26\d{10,}[A-Z0-9]{2,})\b/iu', $both, $m)) { $meta['order_id'] = strtoupper($m[1]); }
+        // Modelos DACE: "Pedido: 260606D3HD9GK3" ou "ID pedido: 260606DCFQ72PJ".
+        if (empty($meta['order_id']) && preg_match('/\bID\s*pedido\s*:\s*([A-Z0-9]{8,})/iu', $both, $m)) { $meta['order_id'] = strtoupper($m[1]); }
+        if (empty($meta['order_id']) && preg_match('/\bPedido\s*:\s*([A-Z0-9]{8,})/iu', $both, $m)) { $meta['order_id'] = strtoupper($m[1]); }
         if (preg_match('/N\.º\s*(\d{5,})/iu', $both, $m) || preg_match('/N[ºo]\s*(\d{5,})/iu', $both, $m)) { $meta['dace_number'] = $m[1]; }
         if (preg_match('/Chave\s+de\s+Acesso\s+DC-e\s*([0-9]{30,})/iu', $both, $m)) { $meta['dce_key'] = $m[1]; }
         if (preg_match('/\b(LEVAR\s+PARA\s+AG[ÊE]NCIA\s+SHOPEE|RETIRADA\s+PELO\s+COMPRADOR|AG[ÊE]NCIA)\b/iu', $page, $m)) { $meta['service'] = preg_replace('/\s+/', ' ', trim($m[1])); }
