@@ -63,6 +63,11 @@ class PdfLabelParser
             $result['labels'] = array_keys($codes);
         }
 
+        // Trava de segurança: remove linha de pedido EXATAMENTE duplicada (mesmo rastreio/venda/pack
+        // + mesmo produto + mesma quantidade = artefato do leitor). Pedido com vários produtos
+        // (mesma chave, produtos diferentes) é preservado.
+        $result['orders'] = $this->dedupeExactOrders($result['orders'] ?? []);
+
         $result['total_labels'] = count(array_unique($result['labels'] ?? []));
         $result['total_orders'] = $this->countOrders($result['orders'] ?? []);
         $result['total_units'] = $this->sumUnits($result['orders'] ?? []);
@@ -2340,6 +2345,27 @@ class PdfLabelParser
             return $b['quantity'] <=> $a['quantity'];
         });
         return array_values($map);
+    }
+
+    // Remove linhas de pedido EXATAMENTE iguais (mesmo identificador + produto + quantidade).
+    // Não toca em pedido multi-item (mesma chave, produtos diferentes) nem em linhas sem identificador.
+    private function dedupeExactOrders($orders)
+    {
+        $seen = [];
+        $out = [];
+        foreach (($orders ?: []) as $o) {
+            $track = trim((string)($o['tracking_code'] ?? ''));
+            $ship  = trim((string)($o['shipment_id'] ?? ''));
+            $sale  = trim((string)($o['sale_id'] ?? ''));
+            $pack  = trim((string)($o['pack_id'] ?? ''));
+            if ($track === '' && $ship === '' && $sale === '' && $pack === '') { $out[] = $o; continue; }
+            $name = $this->lower(preg_replace('/\s+/u', ' ', trim((string)($o['product_name'] ?? ''))));
+            $fp = $track . '|' . $ship . '|' . $sale . '|' . $pack . '|' . $name . '|' . (int)($o['quantity'] ?? 1);
+            if (isset($seen[$fp])) { continue; }
+            $seen[$fp] = true;
+            $out[] = $o;
+        }
+        return $out;
     }
 
     private function countOrders($orders)
