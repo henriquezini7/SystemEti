@@ -528,11 +528,17 @@ class PdfLabelParser
             $left = trim($parts[0]);
             $right = trim($parts[1]);
 
-            // Modelo ML com duas colunas: UUID/metadata à esquerda e produto à direita.
-            if ($this->looksLikeMlItemId($left) && $right !== '') {
+            // Início de pedido na seção "Identificação/Produtos": à esquerda pode vir UUID,
+            // rastreio Correios (XX#########BR) OU um número de Envio puro; à direita, o produto.
+            $startTrack = preg_match('/^([A-Z]{2}\d{9}[A-Z]{2})\b/u', $left, $mt) ? $mt[1] : '';
+            $leftDigits = preg_replace('/\D+/', '', $left);
+            $startEnvio = (preg_match('/^\d[\d ]{6,}\d$/u', $left) && strlen($leftDigits) >= 8) ? $leftDigits : '';
+            if (($this->looksLikeMlItemId($left) || $startTrack !== '' || $startEnvio !== '') && $right !== '' && !$this->looksLikeMlNoise($right)) {
                 $flush();
                 $group = $newGroup();
-                $group['uuid'] = $left;
+                $group['uuid'] = $left; // marca grupo iniciado (necessário para addProduct)
+                if ($startTrack !== '') { $group['tracking_code'] = $startTrack; }
+                if ($startEnvio !== '') { $group['shipment_id'] = $startEnvio; }
                 $addProduct($right);
                 continue;
             }
